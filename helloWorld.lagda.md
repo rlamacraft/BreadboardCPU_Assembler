@@ -6,6 +6,7 @@ open import Data.List using (_∷_; [])
 
 open import Ffi
 open import Assembler
+open import Common
 
 main : IO ⊤
 main = compile (program 8KB

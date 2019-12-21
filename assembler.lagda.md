@@ -4,7 +4,7 @@ module Assembler where
 
 ## Imports
 ```agda
-  open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _^_; _<?_; zero; suc)
+  open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _<?_; zero; suc)
   open import Data.Fin using (Fin; fromℕ≤; fromℕ; raise; _-_; reduce≥; 0F; 1F; 2F; 3F; 4F; 5F; 6F; 7F; 8F; 9F)
   open import Relation.Nullary using (Dec; yes; no)
   open import Data.Maybe using (Maybe; just; nothing)
@@ -14,6 +14,9 @@ module Assembler where
   open import Relation.Binary.PropositionalEquality using (_≡_)
   open import Data.Bool using (Bool; true; false; _∨_)
   open import Data.List using (List; _∷_; []; replicate)
+  open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
+
+  open import Common using (8KB; Byte; Nibble; Address)
 ```
 
 ## Hex Literals
@@ -90,11 +93,6 @@ Extends definitions from Data.Fin.Base
 An instruction contains its address, the opcode to be stored at that address, and a pointer to the next address. This is implemented in hardware as a pair of EEPROMs, one storing the opcodes to be executed and another storing the next value to be placed into the program counter. Therefore, JUMP instructions are not necessary and sequential instructions need not be placed sequentially in ROM, potentially facilitating some optimisations.
 
 ```agda
-  8KB : ℕ        -- size of the EEPROMs
-  8KB = 2 ^ 13
-
-  Address : Set
-  Address = Fin 8KB
 
   IsAddress : ℕ → Set
   IsAddress n = n < 8KB
@@ -122,12 +120,6 @@ An instruction contains its address, the opcode to be stored at that address, an
 
 ## To Binary
 ```agda
-
-  Nibble : Set
-  Nibble = Vec Bool 4
-
-  Byte : Set
-  Byte = Vec Bool 8
 
   pattern O = false
   pattern I = true
@@ -174,9 +166,12 @@ An instruction contains its address, the opcode to be stored at that address, an
 
 ```agda
 
-  program : ℕ → List Instruction → List Byte
-  program padding [] = replicate padding (O , O , O , O , O , O , O , O b)
-  program zero x = []
-  program (suc padding) (_ ⦂ opcode , _ ∷ instructions) = assembleOpCode opcode ∷ program padding instructions
+  program : ℕ → List Instruction → Maybe (List Byte × List (Fin 8KB))
+  program padding [] = just ⟨ replicate padding (O , O , O , O , O , O , O , O b) , replicate padding 0F ⟩
+  program zero x = just ⟨ [] , [] ⟩
+  program (suc padding) (_ ⦂ _ , no _ ∷ _) = nothing
+  program (suc padding) (_ ⦂ opcode , yes ⟨ _ , next ⟩ ∷ instructions) with program padding instructions
+  ... | nothing = nothing
+  ... | just ⟨ signals , gotos ⟩ = just ⟨ assembleOpCode opcode ∷ signals , next ∷ gotos ⟩
 
 ```

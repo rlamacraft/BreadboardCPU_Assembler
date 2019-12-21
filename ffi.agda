@@ -9,6 +9,12 @@ open import Data.List using (List; _∷_; []; map; reverse)
 open import Data.Bool using (Bool; true; false)
 open import Data.Vec using (Vec; toList)
 open import Function using (_∘_)
+open import Data.Maybe using (Maybe; nothing; just)
+open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
+open import Data.Fin using (Fin)
+open import Codata.Musical.Costring using (toCostring)
+
+open import Common using (8KB; Byte; Address)
 
 {-# FOREIGN GHC
   import qualified Data.Text.IO as Text
@@ -61,8 +67,10 @@ postulate
 {-# COMPILE GHC pack = Data.ByteString.pack #-}
 {-# COMPILE GHC hPut = Data.ByteString.hPut #-}
 
-compile : List (Vec Bool 8) → IO ⊤
-compile bytes =
+compile : Maybe (List Byte × List Address) → IO ⊤
+compile nothing =
+  putStrLn (toCostring "Error")
+compile (just ⟨ bytes , _ ⟩) =
   openFile (toFilePath "out.bin") writeMode >>= λ file →
   hPut file (pack (map (boolListToWord8 ∘ reverse ∘ toList) bytes))  >>= λ _ →
   hClose file
