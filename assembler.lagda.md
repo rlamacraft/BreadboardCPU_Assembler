@@ -4,7 +4,7 @@ module Assembler where
 
 ## Imports
 ```agda
-  open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _^_; _<?_; suc)
+  open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _^_; _<?_; zero; suc)
   open import Data.Fin using (Fin; fromℕ≤; fromℕ; raise; _-_; reduce≥; 0F; 1F; 2F; 3F; 4F; 5F; 6F; 7F; 8F; 9F)
   open import Relation.Nullary using (Dec; yes; no)
   open import Data.Maybe using (Maybe; just; nothing)
@@ -12,6 +12,8 @@ module Assembler where
   open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
   open import Data.Vec using (Vec; zipWith; _∷_; []; _++_)
   open import Relation.Binary.PropositionalEquality using (_≡_)
+  open import Data.Bool using (Bool; true; false; _∨_)
+  open import Data.List using (List; _∷_; []; replicate)
 ```
 
 ## Hex Literals
@@ -121,33 +123,20 @@ An instruction contains its address, the opcode to be stored at that address, an
 ## To Binary
 ```agda
 
-  Bit : Set
-  Bit = Fin 2
-
-  _||_ : Bit → Bit → Bit
-  0F || 0F = 0F
-  0F || 1F = 1F
-  1F || _  = 1F
-
   Nibble : Set
-  Nibble = Vec Bit 4
+  Nibble = Vec Bool 4
 
   Byte : Set
-  Byte = Vec Bit 8
+  Byte = Vec Bool 8
 
-  data PseudoBit : Set where
-    O : PseudoBit
-    I : PseudoBit
+  pattern O = false
+  pattern I = true
 
-  toBit : PseudoBit → Bit
-  toBit O = 0F
-  toBit I = 1F
+  _,_,_,_,_,_,_,_b : Bool → Bool → Bool → Bool → Bool → Bool → Bool → Bool → Byte
+  a , b , c , d , e , f , g , h b = a ∷ b ∷ c ∷ d ∷ e ∷ f ∷ g ∷ h ∷ []
 
-  _,_,_,_,_,_,_,_b : PseudoBit → PseudoBit → PseudoBit → PseudoBit → PseudoBit → PseudoBit → PseudoBit → PseudoBit → Byte
-  a , b , c , d , e , f , g , h b = (toBit a) ∷ (toBit b) ∷ (toBit c) ∷ (toBit d) ∷ (toBit e) ∷ (toBit f) ∷ (toBit g) ∷ (toBit h) ∷ []
-
-  _,_,_,_b : PseudoBit → PseudoBit → PseudoBit → PseudoBit → Nibble
-  a , b , c , d b = (toBit a) ∷ (toBit b) ∷ (toBit c) ∷ (toBit d) ∷ []
+  _,_,_,_b : Bool → Bool → Bool → Bool → Nibble
+  a , b , c , d b = a ∷ b ∷ c ∷ d ∷ []
 
   encodeNibble : Fin (suc F) → Nibble
   encodeNibble #0 = O , O , O , O b
@@ -169,16 +158,25 @@ An instruction contains its address, the opcode to be stored at that address, an
 
   assembleBusRead : BusRead → Byte
   assembleBusRead REG_A    = O , O , O , O , O , O , O , O b
-  assembleBusRead REG_B    = O , I , O , O , O , O , O , O b
-  assembleBusRead RAM_DATA = O , O , I , O , O , O , O , O b
-  assembleBusRead RAM_INST = O , I , I , O , O , O , O , O b
+  assembleBusRead REG_B    = O , O , O , O , O , O , I , O b
+  assembleBusRead RAM_DATA = O , O , O , O , O , O , O , I b
+  assembleBusRead RAM_INST = O , O , O , O , O , O , I , I b
 
   assembleBusWrite : BusWrite → Byte
-  assembleBusWrite ALU     = O , O , O , O , O , O , O , I b
-  assembleBusWrite INPUT   = O , O , O , O , O , O , I , O b
-  assembleBusWrite (LIT x) = O , O , O , I b ++ encodeNibble x
+  assembleBusWrite (LIT x) = encodeNibble x ++ I , O , O , O b
+  assembleBusWrite ALU     =   O , O , I , O , O , O , O , O b
+  assembleBusWrite INPUT   =   O , O , O , I , O , O , O , O b
 
   assembleOpCode : OpCode → Byte
-  assembleOpCode (busWrite ⇒ busRead) = zipWith _||_ (assembleBusWrite busWrite) (assembleBusRead busRead)
+  assembleOpCode (busWrite ⇒ busRead) = zipWith _∨_ (assembleBusWrite busWrite) (assembleBusRead busRead)
+
+```
+
+```agda
+
+  program : ℕ → List Instruction → List Byte
+  program padding [] = replicate padding (O , O , O , O , O , O , O , O b)
+  program zero x = []
+  program (suc padding) (_ ⦂ opcode , _ ∷ instructions) = assembleOpCode opcode ∷ program padding instructions
 
 ```
