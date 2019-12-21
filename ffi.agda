@@ -23,22 +23,20 @@ postulate Text : Set
 
 postulate
   stdout       : FileHandle
-  hPutStrLn : FileHandle → String → IO ⊤
+  hPutStrLn    : FileHandle → String → IO ⊤
   writeMode    : IOMode
-  openFile : FilePath → IOMode → IO FileHandle
-  addExtension : FilePath → String → FilePath
-  foo : String → FilePath
-  hClose : FileHandle → IO ⊤
+  openFile     : FilePath → IOMode → IO FileHandle
+  toFilePath   : String → FilePath
+  hClose       : FileHandle → IO ⊤
 
-{-# COMPILE GHC stdout = IO.stdout #-}
-{-# COMPILE GHC hPutStrLn = Text.hPutStrLn #-}
-{-# COMPILE GHC openFile = IO.openFile #-}
-{-# COMPILE GHC writeMode = IO.WriteMode #-}
-{-# COMPILE GHC addExtension = \x y -> FP.addExtension x (Data.Text.unpack y) #-}
-{-# COMPILE GHC foo = \x -> Data.Text.unpack x #-}
-{-# COMPILE GHC hClose = IO.hClose #-}
+{-# COMPILE GHC stdout     = IO.stdout #-}
+{-# COMPILE GHC hPutStrLn  = Text.hPutStrLn #-}
+{-# COMPILE GHC openFile   = IO.openFile #-}
+{-# COMPILE GHC writeMode  = IO.WriteMode #-}
+{-# COMPILE GHC toFilePath = Data.Text.unpack #-}
+{-# COMPILE GHC hClose     = IO.hClose #-}
 
 main =
-  openFile (addExtension (foo "out") "txt") writeMode >>= λ file →
-  hPutStrLn file "Hello, world!"                      >>= λ _    →
+  openFile (toFilePath "out.txt") writeMode >>= λ file →
+  hPutStrLn file "Hello, world!"            >>= λ _    →
   hClose file
