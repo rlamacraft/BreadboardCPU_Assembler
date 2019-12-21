@@ -1,9 +1,9 @@
-```
+```agda
 module Assembler where
 ```
 
 ## Imports
-```
+```agda
   open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _^_; _<?_; suc)
   open import Data.Fin using (Fin; fromℕ≤; fromℕ; raise; _-_; reduce≥; 0F; 1F; 2F; 3F; 4F; 5F; 6F; 7F; 8F; 9F)
   open import Relation.Nullary using (Dec; yes; no)
@@ -15,7 +15,7 @@ module Assembler where
 ```
 
 ## Hex Literals
-```
+```agda
   pattern A = suc 9
   pattern B = suc A
   pattern C = suc B
@@ -27,7 +27,7 @@ module Assembler where
 ## Fin Literals
 
 Extends definitions from Data.Fin.Base
-```
+```agda
   pattern 10F = Fin.suc 9F
   pattern 11F = Fin.suc 10F
   pattern 12F = Fin.suc 11F
@@ -55,7 +55,7 @@ Extends definitions from Data.Fin.Base
 ```
 
 ## OpCode construction
-```
+```agda
   data BusWrite : Set where
 
     ALU   :               BusWrite -- ALU outputs the result of calculation to the bus
@@ -86,7 +86,8 @@ Extends definitions from Data.Fin.Base
 ## Instructions
 
 An instruction contains its address, the opcode to be stored at that address, and a pointer to the next address. This is implemented in hardware as a pair of EEPROMs, one storing the opcodes to be executed and another storing the next value to be placed into the program counter. Therefore, JUMP instructions are not necessary and sequential instructions need not be placed sequentially in ROM, potentially facilitating some optimisations.
-```
+
+```agda
   8KB : ℕ        -- size of the EEPROMs
   8KB = 2 ^ 13
 
@@ -118,7 +119,7 @@ An instruction contains its address, the opcode to be stored at that address, an
 ```
 
 ## To Binary
-```
+```agda
 
   Bit : Set
   Bit = Fin 2
