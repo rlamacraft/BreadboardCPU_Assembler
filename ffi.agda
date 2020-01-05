@@ -71,6 +71,18 @@ compile : Maybe (List Byte × List Address) → IO ⊤
 compile nothing =
   putStrLn (toCostring "Error")
 compile (just ⟨ bytes , _ ⟩) =
-  openFile (toFilePath "out.bin") writeMode >>= λ file →
+  openFile (toFilePath "sig.bin") writeMode >>= λ file →
   hPut file (pack (map (boolListToWord8 ∘ reverse ∘ toList) bytes))  >>= λ _ →
   hClose file
+
+toByteString' : ∀ {n : ℕ} → Vec Byte n → ByteString
+toByteString' = pack ∘ map (boolListToWord8 ∘ reverse ∘ toList) ∘ toList
+
+compile` : ∀ {n : ℕ} → (Vec Byte n) × (Vec Byte n) → IO ⊤
+compile` ⟨ go-tos , signals ⟩ =
+  openFile (toFilePath "go-to.bin") writeMode >>= λ goToFile →
+  hPut goToFile (toByteString' go-tos) >>= λ _ →
+  hClose goToFile >>= λ _ →
+  openFile (toFilePath "sig.bin") writeMode >>= λ sigFile →
+  hPut sigFile (toByteString' signals) >>= λ _ →
+  hClose sigFile

@@ -5,59 +5,20 @@ module Assembler where
 ## Imports
 ```agda
   open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _<?_; zero; suc)
-  open import Data.Fin using (Fin; fromℕ≤; fromℕ; raise; _-_; reduce≥; 0F; 1F; 2F; 3F; 4F; 5F; 6F; 7F; 8F; 9F)
+  open import Data.Fin using (Fin; fromℕ≤; fromℕ; raise; _-_; reduce≥; 0F; 1F; 2F; 3F; 4F; 5F; 6F; 7F; 8F; 9F; toℕ)
   open import Relation.Nullary using (Dec; yes; no)
   open import Data.Maybe using (Maybe; just; nothing)
   open import Function using (_∘_)
   open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
-  open import Data.Vec using (Vec; zipWith; _∷_; []; _++_)
+  open import Data.Vec using (Vec; zipWith; _∷_; []; _++_; fromList; replicate)
   open import Relation.Binary.PropositionalEquality using (_≡_)
   open import Data.Bool using (Bool; true; false; _∨_)
-  open import Data.List using (List; _∷_; []; replicate)
+  open import Data.List using (List; _∷_; [])
   open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
 
-  open import Common using (8KB; Byte; Nibble; Address)
+  open import Common -- using (8KB; Byte; Nibble; Address)
 ```
 
-## Hex Literals
-```agda
-  pattern A = suc 9
-  pattern B = suc A
-  pattern C = suc B
-  pattern D = suc C
-  pattern E = suc D
-  pattern F = suc E
-```
-
-## Fin Literals
-
-Extends definitions from Data.Fin.Base
-```agda
-  pattern 10F = Fin.suc 9F
-  pattern 11F = Fin.suc 10F
-  pattern 12F = Fin.suc 11F
-  pattern 13F = Fin.suc 12F
-  pattern 14F = Fin.suc 13F
-  pattern 15F = Fin.suc 14F
-
-  pattern #0 = 0F
-  pattern #1 = 1F
-  pattern #2 = 2F
-  pattern #3 = 3F
-  pattern #4 = 4F
-  pattern #5 = 5F
-  pattern #6 = 6F
-  pattern #7 = 7F
-  pattern #8 = 8F
-  pattern #9 = 9F
-  pattern #A = 10F
-  pattern #B = 11F
-  pattern #C = 12F
-  pattern #D = 13F
-  pattern #E = 14F
-  pattern #F = 15F
-
-```
 
 ## OpCode construction
 ```agda
@@ -94,27 +55,18 @@ An instruction contains its address, the opcode to be stored at that address, an
 
 ```agda
 
-  IsAddress : ℕ → Set
-  IsAddress n = n < 8KB
-
   infixr 6 _⦂_,_
 
   data Instruction : Set where
-
-    _⦂_,_ : ∀ {m} {n} → Dec (IsAddress m × Address) → OpCode → Dec (IsAddress n × Address) → Instruction
+    _⦂_,_ : Address → OpCode → Address → Instruction
 
   raiseTo : ∀ (m : ℕ) → (n : ℕ) → Dec (m < n × Fin n)
   raiseTo m n with m <? n
   raiseTo m n | yes m<n = yes ⟨ m<n , fromℕ≤ m<n ⟩
   raiseTo m n | no ¬m<n = no λ{ ⟨ m<n , _ ⟩ → ¬m<n m<n}
 
-  infixr 7 ⊢_
-
-  ⊢_ : ∀ (n : ℕ) → Dec (IsAddress n × Address)
-  ⊢_ n = raiseTo n 8KB
-
   exampleInstruction : Instruction
-  exampleInstruction = ⊢ 3 ⦂ LIT #3 ⇒ REG_A , ⊢ 4
+  exampleInstruction = (#0 ⦂ #3) ⦂ LIT #3 ⇒ REG_A , (#0 ⦂ #4)
 
 ```
 
@@ -162,16 +114,23 @@ An instruction contains its address, the opcode to be stored at that address, an
   assembleOpCode : OpCode → Byte
   assembleOpCode (busWrite ⇒ busRead) = zipWith _∨_ (assembleBusWrite busWrite) (assembleBusRead busRead)
 
+  addressToByte : Address → Byte
+  addressToByte (upper ⦂ lower) = encodeNibble upper ++ encodeNibble lower
+
 ```
+
+# Program
+
+Returns a pair of vectors of bytes. The first vector is the compiled go-to addresses that will be written to the go-to ROM and the second vector is the compiled op-codes that will be written to the signals ROM.
 
 ```agda
 
-  program : ℕ → List Instruction → Maybe (List Byte × List (Fin 8KB))
-  program padding [] = just ⟨ replicate padding (O , O , O , O , O , O , O , O b) , replicate padding 0F ⟩
-  program zero x = just ⟨ [] , [] ⟩
-  program (suc padding) (_ ⦂ _ , no _ ∷ _) = nothing
-  program (suc padding) (_ ⦂ opcode , yes ⟨ _ , next ⟩ ∷ instructions) with program padding instructions
-  ... | nothing = nothing
-  ... | just ⟨ signals , gotos ⟩ = just ⟨ assembleOpCode opcode ∷ signals , next ∷ gotos ⟩
-
+  allZeros : Byte
+  allZeros = (addressToByte (#0 ⦂ #0))
+  
+  program : (n : ℕ) → List Instruction → (Vec Byte n) × (Vec Byte n)
+  program 0F         _        = ⟨ [] , [] ⟩
+  program (suc _)    []       = ⟨ replicate allZeros , replicate allZeros ⟩
+  program (suc size) (_ ⦂ opcode , next ∷ xs) with program size xs            -- NOTE: current address is unused i.e. it is a mandatory comment
+  ... | ⟨ go-to , signals ⟩ = ⟨ (addressToByte next ∷ go-to) , (assembleOpCode opcode) ∷ signals ⟩
 ```
