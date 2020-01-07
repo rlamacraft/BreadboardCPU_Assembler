@@ -2,17 +2,13 @@ module Ffi where
 
 open import Agda.Builtin.String
 open import Agda.Builtin.Unit
-open import IO.Primitive
-open import Codata.Musical.Notation
-open import Data.Nat using (ℕ)
+open import Data.Bool using (Bool)
 open import Data.List using (List; _∷_; []; map; reverse)
-open import Data.Bool using (Bool; true; false)
+open import Data.Nat using (ℕ)
+open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
 open import Data.Vec using (Vec; toList)
 open import Function using (_∘_)
-open import Data.Maybe using (Maybe; nothing; just)
-open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
-open import Data.Fin using (Fin)
-open import Codata.Musical.Costring using (toCostring)
+open import IO.Primitive
 
 open import Common using (8KB; Byte; Address)
 
@@ -45,44 +41,36 @@ postulate ByteString : Set
 {-# COMPILE GHC ByteString = type Data.ByteString.ByteString #-}
 
 postulate
-  stdout       : FileHandle
-  hPutStrLn    : FileHandle → String → IO ⊤
-  writeMode    : IOMode
-  openFile     : FilePath → IOMode → IO FileHandle
-  toFilePath   : String → FilePath
-  hClose       : FileHandle → IO ⊤
-  intToShow    : ℕ → String
+  stdout          : FileHandle
+  hPutStrLn       : FileHandle → String → IO ⊤
+  writeMode       : IOMode
+  openFile        : FilePath → IOMode → IO FileHandle
+  toFilePath      : String → FilePath
+  hClose          : FileHandle → IO ⊤
+  intToShow       : ℕ → String
   boolListToWord8 : List Bool → Word8
-  pack : List Word8 → ByteString
-  hPut : FileHandle → ByteString → IO ⊤
+  pack            : List Word8 → ByteString
+  hPut            : FileHandle → ByteString → IO ⊤
 
-{-# COMPILE GHC stdout     = IO.stdout #-}
-{-# COMPILE GHC hPutStrLn  = Text.hPutStrLn #-}
-{-# COMPILE GHC openFile   = IO.openFile #-}
-{-# COMPILE GHC writeMode  = IO.WriteMode #-}
-{-# COMPILE GHC toFilePath = Data.Text.unpack #-}
-{-# COMPILE GHC hClose     = IO.hClose #-}
-{-# COMPILE GHC intToShow  = Data.Text.pack . show #-}
+{-# COMPILE GHC stdout          = IO.stdout #-}
+{-# COMPILE GHC hPutStrLn       = Text.hPutStrLn #-}
+{-# COMPILE GHC openFile        = IO.openFile #-}
+{-# COMPILE GHC writeMode       = IO.WriteMode #-}
+{-# COMPILE GHC toFilePath      = Data.Text.unpack #-}
+{-# COMPILE GHC hClose          = IO.hClose #-}
+{-# COMPILE GHC intToShow       = Data.Text.pack . show #-}
 {-# COMPILE GHC boolListToWord8 = \list -> ifoldr (\index bit byte -> if bit then setBit byte index else byte) (zeroBits :: Word8) (fromList list) #-}
-{-# COMPILE GHC pack = Data.ByteString.pack #-}
-{-# COMPILE GHC hPut = Data.ByteString.hPut #-}
+{-# COMPILE GHC pack            = Data.ByteString.pack #-}
+{-# COMPILE GHC hPut            = Data.ByteString.hPut #-}
 
-compile : Maybe (List Byte × List Address) → IO ⊤
-compile nothing =
-  putStrLn (toCostring "Error")
-compile (just ⟨ bytes , _ ⟩) =
-  openFile (toFilePath "sig.bin") writeMode >>= λ file →
-  hPut file (pack (map (boolListToWord8 ∘ reverse ∘ toList) bytes))  >>= λ _ →
-  hClose file
+toByteString : ∀ {n : ℕ} → Vec Byte n → ByteString
+toByteString = pack ∘ map (boolListToWord8 ∘ reverse ∘ toList) ∘ toList
 
-toByteString' : ∀ {n : ℕ} → Vec Byte n → ByteString
-toByteString' = pack ∘ map (boolListToWord8 ∘ reverse ∘ toList) ∘ toList
-
-compile` : ∀ {n : ℕ} → (Vec Byte n) × (Vec Byte n) → IO ⊤
-compile` ⟨ go-tos , signals ⟩ =
+compile : ∀ {n : ℕ} → (Vec Byte n) × (Vec Byte n) → IO ⊤
+compile ⟨ go-tos , signals ⟩ =
   openFile (toFilePath "go-to.bin") writeMode >>= λ goToFile →
-  hPut goToFile (toByteString' go-tos) >>= λ _ →
+  hPut goToFile (toByteString go-tos) >>= λ _ →
   hClose goToFile >>= λ _ →
   openFile (toFilePath "sig.bin") writeMode >>= λ sigFile →
-  hPut sigFile (toByteString' signals) >>= λ _ →
+  hPut sigFile (toByteString signals) >>= λ _ →
   hClose sigFile

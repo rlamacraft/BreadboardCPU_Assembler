@@ -5,6 +5,7 @@ open import Data.Nat using (ℕ; suc; _^_)
 open import Data.Vec using (Vec)
 open import Data.Bool using (Bool)
 open import Data.Fin using (Fin; 0F; 1F; 2F; 3F; 4F; 5F; 6F; 7F; 8F; 9F)
+open import Data.Product using (_×_)
 ```
 
 ## Boolean General Use
@@ -62,9 +63,8 @@ pattern #F = 15F
 8KB : ℕ        -- size of the EEPROMs
 8KB = 2 ^ 13
 
-data Address : Set where
-
-  _⦂_ : Fin (suc F) → Fin (suc F) → Address
+Address : Set
+Address = (Fin (suc F)) × (Fin (suc F))
 
 
 ```

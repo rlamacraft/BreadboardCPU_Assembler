@@ -4,19 +4,15 @@ module Assembler where
 
 ## Imports
 ```agda
-  open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _<?_; zero; suc)
+  open import Data.Bool using (Bool; true; false; _∨_)
   open import Data.Fin using (Fin; fromℕ≤; fromℕ; raise; _-_; reduce≥; 0F; 1F; 2F; 3F; 4F; 5F; 6F; 7F; 8F; 9F; toℕ)
-  open import Relation.Nullary using (Dec; yes; no)
-  open import Data.Maybe using (Maybe; just; nothing)
-  open import Function using (_∘_)
+  open import Data.List using (List; _∷_; []; map)
+  open import Data.Nat using (ℕ; z≤n; s≤s; _<_; _<?_; zero; suc)
   open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
   open import Data.Vec using (Vec; zipWith; _∷_; []; _++_; fromList; replicate)
-  open import Relation.Binary.PropositionalEquality using (_≡_)
-  open import Data.Bool using (Bool; true; false; _∨_)
-  open import Data.List using (List; _∷_; [])
-  open import Data.Product using (_×_) renaming (_,_ to ⟨_,_⟩)
+  open import Function using (_∘_; _$_)
 
-  open import Common -- using (8KB; Byte; Nibble; Address)
+  open import Common
 ```
 
 
@@ -51,26 +47,27 @@ module Assembler where
 
 ## Instructions
 
-An instruction contains its address, the opcode to be stored at that address, and a pointer to the next address. This is implemented in hardware as a pair of EEPROMs, one storing the opcodes to be executed and another storing the next value to be placed into the program counter. Therefore, JUMP instructions are not necessary and sequential instructions need not be placed sequentially in ROM, potentially facilitating some optimisations.
+An instruction contains its address (which we ignore for now), the opcode to be stored at that address, and a pointer to the next address. This is implemented in hardware as a pair of EEPROMs, one storing the opcodes to be executed and another storing the next value to be placed into the program counter. Therefore, JUMP instructions are not necessary and sequential instructions need not be placed sequentially in ROM, potentially facilitating some optimisations.
+
+If the "IfZero" variant allows for conditional logic. The ALU outputs a zero flag which is fed into the go-to ROM as address line 8. By providing 2 versions of the program but slightly changing the version when the flag is set versus not set, conditional logic is made possible. Different operations may be performed by varying the signals, or different code may be executed by varying the go-tos - or both. The first constructor provides both variants (with and without the flag) with the same signals and go-tos whilst the IfZero variant provides the means for different instructions for each variant. Other conditional logic may be added in this way in the future including carry flag and interrupt flag. The ROM chips have 13 input lines, with 8 taken for the program counter this leaves 5 possible flags.
 
 ```agda
 
   infixr 6 _⦂_,_
+  infixr 8 _⦂_,_IfZero⦂_,_
 
   data Instruction : Set where
     _⦂_,_ : Address → OpCode → Address → Instruction
-
-  raiseTo : ∀ (m : ℕ) → (n : ℕ) → Dec (m < n × Fin n)
-  raiseTo m n with m <? n
-  raiseTo m n | yes m<n = yes ⟨ m<n , fromℕ≤ m<n ⟩
-  raiseTo m n | no ¬m<n = no λ{ ⟨ m<n , _ ⟩ → ¬m<n m<n}
+    _⦂_,_IfZero⦂_,_ : Address → OpCode → Address → OpCode → Address → Instruction
 
   exampleInstruction : Instruction
-  exampleInstruction = (#0 ⦂ #3) ⦂ LIT #3 ⇒ REG_A , (#0 ⦂ #4)
+  exampleInstruction = ⟨ #0 , #3 ⟩ ⦂ LIT #3 ⇒ REG_A , ⟨ #0 , #4 ⟩
 
 ```
 
 ## To Binary
+
+Standard functionality for creating the bytes to be written to the ROM chips.
 ```agda
 
   pattern O = false
@@ -115,7 +112,7 @@ An instruction contains its address, the opcode to be stored at that address, an
   assembleOpCode (busWrite ⇒ busRead) = zipWith _∨_ (assembleBusWrite busWrite) (assembleBusRead busRead)
 
   addressToByte : Address → Byte
-  addressToByte (upper ⦂ lower) = encodeNibble upper ++ encodeNibble lower
+  addressToByte ⟨ upper , lower ⟩ = encodeNibble upper ++ encodeNibble lower
 
 ```
 
@@ -126,11 +123,17 @@ Returns a pair of vectors of bytes. The first vector is the compiled go-to addre
 ```agda
 
   allZeros : Byte
-  allZeros = (addressToByte (#0 ⦂ #0))
-  
-  program : (n : ℕ) → List Instruction → (Vec Byte n) × (Vec Byte n)
-  program 0F         _        = ⟨ [] , [] ⟩
-  program (suc _)    []       = ⟨ replicate allZeros , replicate allZeros ⟩
-  program (suc size) (_ ⦂ opcode , next ∷ xs) with program size xs            -- NOTE: current address is unused i.e. it is a mandatory comment
-  ... | ⟨ go-to , signals ⟩ = ⟨ (addressToByte next ∷ go-to) , (assembleOpCode opcode) ∷ signals ⟩
+  allZeros = (addressToByte ⟨ #0 , #0 ⟩)
+
+  fromPaddedList : ∀ {A : Set} → (n : ℕ) → A → List A → Vec A n
+  fromPaddedList 0F padding list            = []
+  fromPaddedList (suc n) padding []         = padding ∷ fromPaddedList n padding []
+  fromPaddedList (suc n) padding (x ∷ list) = x       ∷ fromPaddedList n padding list
+
+  program : List Instruction → (Vec Byte 8KB) × (Vec Byte 8KB)
+  program ins = ⟨ (gotos_notZeroFlag ++ gotos_zeroFlag ++ replicate allZeros) , signal_notZeroFlag ++ signal_zeroFlag ++ replicate allZeros ⟩ where
+    signal_notZeroFlag = fromPaddedList 256 allZeros $ map (assembleOpCode ∘ λ{ (_ ⦂ x , _) → x ; (_ ⦂ x , _ IfZero⦂ _ , _) → x}) ins
+    signal_zeroFlag    = fromPaddedList 256 allZeros $ map (assembleOpCode ∘ λ{ (_ ⦂ x , _) → x ; (_ ⦂ _ , _ IfZero⦂ x , _) → x}) ins
+    gotos_notZeroFlag  = fromPaddedList 256 allZeros $ map (addressToByte  ∘ λ{ (_ ⦂ _ , x) → x ; (_ ⦂ _ , x IfZero⦂ _ , _) → x}) ins
+    gotos_zeroFlag     = fromPaddedList 256 allZeros $ map (addressToByte  ∘ λ{ (_ ⦂ _ , x) → x ; (_ ⦂ _ , _ IfZero⦂ _ , x) → x}) ins
 ```
